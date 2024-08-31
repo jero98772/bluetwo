@@ -1,8 +1,11 @@
+import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write, read
 from scipy.io import wavfile
 #streamlit run main.py 
 import io
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+from pydub import AudioSegment
 
 letras = "abcdefghijklmnopqrstuvwxyz"
 
@@ -144,16 +147,62 @@ def save_audio(x,name):
 # Convert to 16-bit PCM format
 
     write('sine_wave.wav', FS, x)
+# Streamlit UI
+st.title("DTMF Encoding and Decoding")
 
-name='sine_wave.wav'
-text_input=input()
-encoded_text = encpalabranum(text_input)
-audio_data = dtmf_dial(encoded_text)
-print(encoded_text)
-print(audio_data)
-save_audio(audio_data,name)
-_, audio_data = wavfile.read(name)
-decoded_number = dtmf_decode(audio_data)
-decoded_text = decpalabranum(decoded_number)
-print(decoded_number)
-print(decoded_text)
+text_input = st.text_input("Enter text to encode:")
+
+if st.button("Encode and Generate Audio"):
+    encoded_text = encpalabranum(text_input)
+    st.write(f"Encoded text: {encoded_text}")
+
+    audio_data = dtmf_dial(encoded_text)
+    #audio_file = save_audio(audio_data)
+    name='sine_wave.wav'
+    save_audio(audio_data,name)
+
+    _, audio_data = wavfile.read(name)
+
+    st.audio(audio_data, format='audio/wav',sample_rate=FS)
+
+    # Decode and display
+    #audio_array, _ = read(io.BytesIO(audio_file.getvalue()))
+    #_, audio_data = read(audio_file)
+    decoded_number = dtmf_decode(audio_data)
+    decoded_text = decpalabranum(decoded_number)
+    st.write(f"Decoded text: {decoded_text}")
+
+
+#wav_audio_data = st_audiorec()
+
+webrtc_ctx = webrtc_streamer(
+    key="audio-record",
+    mode=WebRtcMode.SENDRECV,
+    client_settings=ClientSettings(
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+        media_stream_constraints={"audio": True, "video": False},
+    ),
+)
+
+if webrtc_ctx.audio_receiver:
+    audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
+    if audio_frames:
+        audio_bytes = b"".join([frame.to_ndarray(format="webm") for frame in audio_frames])
+        wav_audio = process_audio(audio_bytes)
+        st.audio(wav_audio, format="audio/wav")
+        st.download_button("Download Audio", wav_audio, "recorded_audio.wav")
+        if wav_audio_data is not None:
+            decoded_number = dtmf_decode(wav_audio)
+            decoded_text = decpalabranum(decoded_number)
+            st.write(f"Decoded text: {decoded_text}")
+
+"""        
+if wav_audio_data is not None:
+    st.audio(wav_audio_data, format='audio/wav')
+    #st.audio(audio_data, format='audio/wav',sample_rate=FS)
+
+    # Decode and display
+    #audio_array, _ = read(io.BytesIO(audio_file.getvalue()))
+    #_, audio_data = read(audio_file)
+
+"""

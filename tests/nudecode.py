@@ -1,8 +1,11 @@
+import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write, read
 from scipy.io import wavfile
 #streamlit run main.py 
 import io
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+from pydub import AudioSegment
 
 letras = "abcdefghijklmnopqrstuvwxyz"
 
