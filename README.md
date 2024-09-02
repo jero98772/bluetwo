@@ -65,7 +65,7 @@ pip install numpy scipy
 - Input Text: `hola`
 - Encoded Text: `#444#6666#5555#22#`
 <audio controls>
-  <source src="https://github.com/jero98772/bluetwo/raw/main/tests/output.wav" type="audio/mpeg">
+  <source src="https://github.com/jero98772/bluetwo/raw/main/tests/hello.wav" type="audio/wav">
   Your browser does not support the audio element.
 </audio>
 
