@@ -1,29 +1,60 @@
-import numpy as np
-from scipy.io.wavfile import write, read
+import pyaudio
+import wave
 from scipy.io import wavfile
-#streamlit run main.py 
-import io
-
-letras = "abcdefghijklmnopqrstuvwxyz"
+import numpy as np
+# Configuration
 FS = 22050
-numcode = ['22', '222', '2222', '33', '333', '3333', '44', '444', '4444', '55', '555', '5555', '66', '666', '6666', '77', '777', '7777', '77777', '88', '888', '8888', '99', '999', '9999', '99999']
+FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
+CHANNELS = 1              # Number of audio channels (1 for mono, 2 for stereo)
+RATE = 44100              # Sample rate (samples per second)
+CHUNK = 1024              # Number of audio frames per buffer
+RECORD_SECONDS = 5        # Number of seconds to record
+WAVE_OUTPUT_FILENAME = "output.wav"  # Output file name
 
-def encpalabranum(palabra,sep="#",space="*"):
-    palabraenc = ""
-    for i in palabra:
-        try:
-            palabraenc+=str(int(i))
-            palabraenc+=sep
-        except:
-            pass
-        for ii in range(len(numcode)):
-            if i == letras[ii]:
-                palabraenc += numcode[ii]
-                palabraenc+=sep
-        if i == " ":
-            palabraenc +=space
-            palabraenc+=sep
-    return sep+palabraenc
+# Initialize PyAudio
+audio = pyaudio.PyAudio()
+
+# Open stream
+try:
+    stream = audio.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK)
+except OSError as e:
+    print(f"Error opening stream: {e}")
+    audio.terminate()
+    exit(1)
+
+print("Recording...")
+
+frames = []
+
+# Record data
+for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+    try:
+        data = stream.read(CHUNK, exception_on_overflow=False)
+        frames.append(data)
+    except IOError as e:
+        print(f"Error: {e}")
+
+print("Finished recording.")
+
+# Stop and close the stream
+stream.stop_stream()
+stream.close()
+audio.terminate()
+
+# Save the recorded data as a WAV file
+with wave.open(WAVE_OUTPUT_FILENAME, 'wb') as wf:
+    wf.setnchannels(CHANNELS)
+    wf.setsampwidth(audio.get_sample_size(FORMAT))
+    wf.setframerate(RATE)
+    wf.writeframes(b''.join(frames))
+
+print(f"File saved as {WAVE_OUTPUT_FILENAME}")
+
+
 def decpalabranum(palbraenc,sep="#",space="*"):
     palabra = ""
     caracter = ""
@@ -40,25 +71,6 @@ def decpalabranum(palbraenc,sep="#",space="*"):
         else:
             caracter+=i
     return palabra
-
-
-def dtmf_dial(number):
-    DTMF = {
-        '1': (697, 1209), '2': (697, 1336), '3': (697, 1477),
-        '4': (770, 1209), '5': (770, 1336), '6': (770, 1477),
-        '7': (852, 1209), '8': (852, 1336), '9': (852, 1477),
-        '*': (941, 1209), '0': (941, 1336), '#': (941, 1477),        
-    }
-    MARK = 0.1
-    SPACE = 0.1
-    n = np.arange(0, int(MARK * FS))
-    x = np.array([])
-    for d in number:
-        s = np.sin(2*np.pi * DTMF[d][0] / FS * n) + np.sin(2*np.pi * DTMF[d][1] / FS * n) 
-        x = np.concatenate((x, s, np.zeros(int(SPACE * FS))))
-    return x
-
-
 def dtmf_split(x, win=240, th=200):
     edges = []
     
@@ -121,41 +133,9 @@ def dtmf_decode(x, edges = None):
         number.append(KEYS[row][col])
     return number
 
-# Function to handle the recorded audio
-def process_audio(audio_bytes):
-    # Convert the byte data to an AudioSegment
-    audio = AudioSegment.from_file(BytesIO(audio_bytes), format="webm")
-    # Export as WAV
-    output = BytesIO()
-    audio.export(output, format="wav")
-    return output.getvalue()
 
-
-def save_audio(x):
-    x = np.asarray(x)
-    x = (x).astype(np.int16)
-    buffer = io.BytesIO()
-    write(buffer, FS, x)
-    buffer.seek(0)
-
-    return x
-def save_audio(x,name):
-# Convert to 16-bit PCM format
-
-    write('sine_wave.wav', FS, x)
-
-name='sine_wave.wav'
-text_input=input()
-encoded_text = encpalabranum(text_input)
-audio_data = dtmf_dial(encoded_text)
-print(encoded_text)
-print(audio_data)
-noise = np.random.normal(0, 0.5, audio_data.shape)
-noisy_array = audio_data + noise
-print(noisy_array)
-save_audio(noisy_array,name)
-_, audio_data = wavfile.read(name)
+_, audio_data = wavfile.read(WAVE_OUTPUT_FILENAME)
 decoded_number = dtmf_decode(audio_data)
 decoded_text = decpalabranum(decoded_number)
-print(decoded_number)
-print(decoded_text)
+print("Decoded number",decoded_number)
+print("Decoded text",decoded_text)

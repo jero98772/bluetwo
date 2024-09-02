@@ -2,13 +2,13 @@ import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write, read
 from scipy.io import wavfile
-#streamlit run main.py 
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, ClientSettings
+import av
 import io
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
 from pydub import AudioSegment
-
+from io import BytesIO
+FS = 22050
 letras = "abcdefghijklmnopqrstuvwxyz"
-
 numcode = ['22', '222', '2222', '33', '333', '3333', '44', '444', '4444', '55', '555', '5555', '66', '666', '6666', '77', '777', '7777', '77777', '88', '888', '8888', '99', '999', '9999', '99999']
 
 def encpalabranum(palabra,sep="#",space="*"):
@@ -27,11 +27,13 @@ def encpalabranum(palabra,sep="#",space="*"):
             palabraenc +=space
             palabraenc+=sep
     return sep+palabraenc
-def decpalabranum(palbraenc,sep="#",space="*"):
+
+
+def decpalabranum(palbraenc, sep="#", space="*"):
     palabra = ""
     caracter = ""
     for i in palbraenc:
-        if i ==  sep:
+        if i == sep:
             if caracter == space:
                 palabra += " "
             else:
@@ -41,10 +43,9 @@ def decpalabranum(palbraenc,sep="#",space="*"):
                     palabra += str(caracter)
             caracter = ""
         else:
-            caracter+=i
+            caracter += i
     return palabra
 
-FS = 24000
 
 def dtmf_dial(number):
     DTMF = {
@@ -62,93 +63,73 @@ def dtmf_dial(number):
         x = np.concatenate((x, s, np.zeros(int(SPACE * FS))))
     return x
 
-
 def dtmf_split(x, win=240, th=200):
     edges = []
-    
-    w = np.reshape(x[:int(len(x)/win)*win], (-1, win))
+    w = np.reshape(x[:int(len(x) / win) * win], (-1, win))
     we = np.sum(w * w, axis=1)
     L = len(we)
-    
     ix = 0
     while ix < L:
         while ix < L and we[ix] < th:
-            ix = ix+1
+            ix = ix + 1
         if ix >= L:
-            break    # ending on silence
+            break
         iy = ix
         while iy < L and we[iy] > th:
-            iy = iy+1
+            iy = iy + 1
         edges.append((ix * win, iy * win))
         ix = iy
-    
     return edges
 
-def dtmf_decode(x, edges = None):
-    # the DTMF frequencies
+def dtmf_decode(x, edges=None):
     LO_FREQS = np.array([697.0, 770.0, 852.0, 941.0])
     HI_FREQS = np.array([1209.0, 1336.0, 1477.0])
-
     KEYS = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['*', '0', '#']]
-    
-    # frequency ranges to search for low and high DTMF tones
     LO_RANGE = (680.0, 960.0)
     HI_RANGE = (1180.0, 1500.0)
-
     number = []
-    
-    # now examine each tone in turn. the freqency mapping on the DFT
-    #  axis will be dependent on the length of the data vector
     if edges is None:
         edges = dtmf_split(x)
     for g in edges:
-        # compute the DFT of the tone segment
         X = abs(np.fft.fft(x[g[0]:g[1]]))
         N = len(X)
-        # compute the resolution in Hz of a DFT bin
         res = float(FS) / N
-        
-        # find the peak location within the low freq range
         a = int(LO_RANGE[0] / res)
         b = int(LO_RANGE[1] / res)
         lo = a + np.argmax(X[a:b])
-        # find the peak location within the high freq range
         a = int(HI_RANGE[0] / res)
         b = int(HI_RANGE[1] / res)
         hi = a + np.argmax(X[a:b])
-      
-        # now match the results to the DTMF frequencies
         row = np.argmin(abs(LO_FREQS - lo * res))
         col = np.argmin(abs(HI_FREQS - hi * res))
-
-        # and finally convert that to the pressed key
         number.append(KEYS[row][col])
     return number
 
-# Function to handle the recorded audio
-def process_audio(audio_bytes):
-    # Convert the byte data to an AudioSegment
-    audio = AudioSegment.from_file(BytesIO(audio_bytes), format="webm")
-    # Export as WAV
-    output = BytesIO()
-    audio.export(output, format="wav")
-    return output.getvalue()
+class AudioRecorder(AudioProcessorBase):
+    def __init__(self):
+        self.frames = []
 
+    def recv_audio(self, frame: av.AudioFrame) -> av.AudioFrame:
+        self.frames.append(frame)
+        return frame
 
-def save_audio(x):
-    x = np.asarray(x)
-    x = (x).astype(np.int16)
-    buffer = io.BytesIO()
-    write(buffer, FS, x)
-    buffer.seek(0)
+    def get_audio_bytes(self):
+        if len(self.frames) > 0:
+            return b''.join([frame.to_ndarray().tobytes() for frame in self.frames])
+        return None
 
-    return x
-def save_audio(x,name):
-# Convert to 16-bit PCM format
+client_settings = ClientSettings(
+    media_stream_constraints={"audio": True, "video": False}
+)
 
-    write('sine_wave.wav', FS, x)
-# Streamlit UI
 st.title("DTMF Encoding and Decoding")
+
+ctx = webrtc_streamer(
+    key="audio-recorder",
+    mode=WebRtcMode.SENDRECV,
+    client_settings=client_settings,
+    audio_processor_factory=AudioRecorder
+)
 
 text_input = st.text_input("Enter text to encode:")
 
@@ -157,52 +138,38 @@ if st.button("Encode and Generate Audio"):
     st.write(f"Encoded text: {encoded_text}")
 
     audio_data = dtmf_dial(encoded_text)
-    #audio_file = save_audio(audio_data)
-    name='sine_wave.wav'
-    save_audio(audio_data,name)
+    name = 'sine_wave.wav'
+    write(name, FS, audio_data.astype(np.int16))
 
+    # Read and play the generated WAV file
     _, audio_data = wavfile.read(name)
+    st.audio(audio_data, format='audio/wav', sample_rate=FS)
 
-    st.audio(audio_data, format='audio/wav',sample_rate=FS)
-
-    # Decode and display
-    #audio_array, _ = read(io.BytesIO(audio_file.getvalue()))
-    #_, audio_data = read(audio_file)
     decoded_number = dtmf_decode(audio_data)
     decoded_text = decpalabranum(decoded_number)
     st.write(f"Decoded text: {decoded_text}")
 
+if st.button("Save and Decode Recorded Audio"):
+    print("processor",ctx.audio_processor)
+    if ctx.audio_processor:
+        audio_bytes = ctx.audio_processor.get_audio_bytes()
+        print("audio",audio_bytes)
+        if audio_bytes:
+            audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
+            output = io.BytesIO()
+            audio.export(output, format="wav")
+            wav_audio = output.getvalue()
 
-#wav_audio_data = st_audiorec()
+            # Display the audio in Streamlit
+            st.audio(wav_audio, format='audio/wav')
+            
+            # Convert WAV bytes to numpy array
+            audio_array = np.frombuffer(wav_audio, dtype=np.int16)
 
-webrtc_ctx = webrtc_streamer(
-    key="audio-record",
-    mode=WebRtcMode.SENDRECV,
-    client_settings=ClientSettings(
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"audio": True, "video": False},
-    ),
-)
-
-if webrtc_ctx.audio_receiver:
-    audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
-    if audio_frames:
-        audio_bytes = b"".join([frame.to_ndarray(format="webm") for frame in audio_frames])
-        wav_audio = process_audio(audio_bytes)
-        st.audio(wav_audio, format="audio/wav")
-        st.download_button("Download Audio", wav_audio, "recorded_audio.wav")
-        if wav_audio_data is not None:
-            decoded_number = dtmf_decode(wav_audio)
+            decoded_number = dtmf_decode(audio_array)
             decoded_text = decpalabranum(decoded_number)
             st.write(f"Decoded text: {decoded_text}")
-
-"""        
-if wav_audio_data is not None:
-    st.audio(wav_audio_data, format='audio/wav')
-    #st.audio(audio_data, format='audio/wav',sample_rate=FS)
-
-    # Decode and display
-    #audio_array, _ = read(io.BytesIO(audio_file.getvalue()))
-    #_, audio_data = read(audio_file)
-
-"""
+        else:
+            st.warning("No audio recorded yet!")
+    else:
+        st.warning("Audio processor not available!")
