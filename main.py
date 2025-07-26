@@ -130,7 +130,7 @@ def process_audio(audio_bytes):
     audio.export(output, format="wav")
     return output.getvalue()
 
-
+"""
 def save_audio(x):
     x = np.asarray(x)
     x = (x).astype(np.int16)
@@ -139,22 +139,35 @@ def save_audio(x):
     buffer.seek(0)
 
     return x
+"""
 def save_audio(x,name):
 # Convert to 16-bit PCM format
 
     write('sine_wave.wav', FS, x)
 
 name='sine_wave.wav'
+
 text_input=input()
 encoded_text = encpalabranum(text_input)
 audio_data = dtmf_dial(encoded_text)
 print(encoded_text)
 print(audio_data)
+print(f"\nSample rate: {FS}, Data type: {audio_data.dtype}, Shape: {audio_data.shape}")  # Debug
+
+print(f"Audio stats: min={np.min(audio_data)}, max={np.max(audio_data)}, mean={np.mean(audio_data)}")  # Debug
+
 noise = np.random.normal(0, 0.5, audio_data.shape)
-noisy_array = audio_data + noise
+noisy_array = audio_data# + noise
 print(noisy_array)
 save_audio(noisy_array,name)
+
+
 _, audio_data = wavfile.read(name)
+
+print(f"\nSample rate: {FS}, Data type: {audio_data.dtype}, Shape: {audio_data.shape}")  # Debug
+
+print(f"Audio stats: min={np.min(audio_data)}, max={np.max(audio_data)}, mean={np.mean(audio_data)}")  # Debug
+
 decoded_number = dtmf_decode(audio_data)
 decoded_text = decpalabranum(decoded_number)
 print(decoded_number)
