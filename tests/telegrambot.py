@@ -9,7 +9,7 @@ from telebot import types
 import subprocess
 
 # Your bot token here
-BOT_TOKEN = "-"
+BOT_TOKEN = "7976727308:AAEOd3Z59DKeYgwFDmWrvUTuiT0QKS3CFJ4"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 letras = "abcdefghijklmnopqrstuvwxyz"
@@ -146,6 +146,7 @@ def text_to_audio(text):
     audio_data = dtmf_dial(encoded_text)
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
     print(f"\nSample rate: {FS}, Data type: {audio_data.dtype}, Shape: {audio_data.shape}")  # Debug
+
     print(f"Audio stats: min={np.min(audio_data)}, max={np.max(audio_data)}, mean={np.mean(audio_data)}")  # Debug
     write(temp_file.name, FS, audio_data)
     print(f"Audio saved to: {temp_file.name}")  

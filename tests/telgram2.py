@@ -1,7 +1,9 @@
 import numpy as np
 from scipy.io.wavfile import write, read
 from scipy.io import wavfile
-#streamlit run main.py 
+from telegram import Update, Bot
+from telegram.ext import Application, MessageHandler, CommandHandler, ContextTypes, filters
+from telegram.constants import ChatAction
 import io
 
 letras = "abcdefghijklmnopqrstuvwxyz"
@@ -145,22 +147,12 @@ def save_audio(x,name):
 
     write('sine_wave.wav', FS, x)
 
-name='sine_wave.wav'
 
-text_input=input()
-encoded_text = encpalabranum(text_input)
-audio_data = dtmf_dial(encoded_text)
-print(encoded_text)
-print(audio_data)
-print(f"\nSample rate: {FS}, Data type: {audio_data.dtype}, Shape: {audio_data.shape}")  # Debug
-
-print(f"Audio stats: min={np.min(audio_data)}, max={np.max(audio_data)}, mean={np.mean(audio_data)}")  # Debug
-
+"""
 noise = np.random.normal(0, 0.5, audio_data.shape)
-noisy_array = audio_data + noise
+noisy_array = audio_data# + noise
 print(noisy_array)
 save_audio(noisy_array,name)
-
 
 _, audio_data = wavfile.read(name)
 
@@ -172,3 +164,86 @@ decoded_number = dtmf_decode(audio_data)
 decoded_text = decpalabranum(decoded_number)
 print(decoded_number)
 print(decoded_text)
+
+"""
+
+
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ChatAction
+from scipy.io import wavfile
+
+TOKEN = ""
+SAMPLE_AUDIO = 'sine_wave.wav'
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id, 
+        action=ChatAction.TYPING
+    )
+    await update.message.reply_text("Hola")
+
+async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("audio")
+    user = update.message.from_user
+    message = update.message
+    
+    # Get audio file object
+    if message.audio:
+        audio_file = message.audio
+    elif message.voice:
+        audio_file = message.voice
+    else:
+        await message.reply_text("No se pudo obtener el archivo de audio")
+        return
+    
+    # Download the file with original extension
+    file = await context.bot.get_file(audio_file.file_id)
+    
+    # Download to temporary file first (Telegram files are usually OGG/MP4)
+    temp_file = f"temp_audio_{audio_file.file_id}"
+    await file.download_to_drive(temp_file)
+    
+    # Convert to WAV if needed (you may need to add conversion logic here)
+    # For now, try to read directly but handle the conversion
+    try:
+        sample_rate, audio_data = wavfile.read(temp_file)
+    except:
+        # If direct read fails, you need to convert the file to WAV first
+        # This requires ffmpeg or similar tool
+        await message.reply_text("Error: No se pudo procesar el archivo de audio. Necesita conversión a WAV.")
+        return
+    
+    decoded_number = dtmf_decode(audio_data)
+    decoded_text = decpalabranum(decoded_number)
+    print(decoded_number)
+    print(decoded_text)    
+    await message.reply_text(f"numero {decoded_number} texto {decoded_text}")
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
+    print(user_text)
+    encoded_text = encpalabranum(user_text)
+    audio_data = dtmf_dial(encoded_text)
+    print(encoded_text)
+    print(audio_data)
+    
+    # Make sure save_audio creates a proper WAV file
+    save_audio(audio_data, SAMPLE_AUDIO)
+    
+    # Send audio file and close it properly
+    with open(SAMPLE_AUDIO, 'rb') as audio_file:
+        await update.message.reply_audio(
+            audio=audio_file,
+            caption=f"Aquí tienes un audio de {user_text} significa {encoded_text}"
+        )
+
+if __name__ == "__main__":
+    app = Application.builder().token(TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE, handle_audio))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    
+    print("Bot en funcionamiento...")
+    app.run_polling()
