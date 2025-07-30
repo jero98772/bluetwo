@@ -9,7 +9,7 @@ from telebot import types
 import subprocess
 
 # Your bot token here
-BOT_TOKEN = "7976727308:AAEOd3Z59DKeYgwFDmWrvUTuiT0QKS3CFJ4"
+BOT_TOKEN = ""
 bot = telebot.TeleBot(BOT_TOKEN)
 
 letras = "abcdefghijklmnopqrstuvwxyz"
